@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 import sqlite3
@@ -7,6 +6,7 @@ import plotly.express as px
 import joblib
 import numpy as np
 from email_service import send_email
+from streamlit_google_auth import Authenticate
 
 # ---------------- PAGE CONFIG ----------------
 
@@ -22,26 +22,22 @@ st.markdown("""
 <style>
 
 /* Main App */
-
 .stApp {
     background-color: #f4f7fb;
 }
 
 /* Sidebar */
-
 section[data-testid="stSidebar"] {
     background-color: #0f172a;
     color: white;
 }
 
 /* Sidebar Text */
-
 section[data-testid="stSidebar"] * {
     color: white !important;
 }
 
 /* Main Titles */
-
 h1 {
     color: #0f172a !important;
     font-weight: 700;
@@ -52,69 +48,41 @@ h2, h3, h4 {
 }
 
 /* Metric Cards */
-
 [data-testid="metric-container"] {
-
     background-color: white;
-
     border: 1px solid #e2e8f0;
-
     padding: 20px;
-
     border-radius: 15px;
-
-    box-shadow:
-        0px 2px 8px rgba(0,0,0,0.05);
-
+    box-shadow: 0px 2px 8px rgba(0,0,0,0.05);
 }
 
 /* Buttons */
-
 .stButton > button {
-
     background-color: #2563eb;
-
     color: white;
-
     border: none;
-
     border-radius: 10px;
-
     padding: 10px 18px;
-
     font-weight: 600;
-
 }
 
 .stButton > button:hover {
-
     background-color: #1d4ed8;
-
     color: white;
-
 }
 
 /* Input Fields */
-
 .stTextInput input,
 .stNumberInput input {
-
     border-radius: 10px;
-
     border: 1px solid #cbd5e1;
-
     padding: 10px;
-
 }
 
 /* Tables */
-
 [data-testid="stDataFrame"] {
-
     border-radius: 10px;
-
     overflow: hidden;
-
 }
 
 </style>
@@ -123,63 +91,35 @@ h2, h3, h4 {
 # ---------------- DATABASE ----------------
 
 def create_connection():
-
     return sqlite3.connect("finance.db")
 
 # ---------------- USER FUNCTIONS ----------------
 
-def register_user(
-    username,
-    email,
-    password
-):
-
+def register_user(username, email, password):
     conn = create_connection()
-
     cursor = conn.cursor()
-
     hashed_password = bcrypt.hashpw(
         password.encode('utf-8'),
         bcrypt.gensalt()
     )
-
     try:
-
         cursor.execute(
             """
-            INSERT INTO users(
-                username,
-                email,
-                password
-            )
-
+            INSERT INTO users(username, email, password)
             VALUES (?, ?, ?)
             """,
-            (
-                username,
-                email,
-                hashed_password
-            )
+            (username, email, hashed_password)
         )
-
         conn.commit()
-
         return True
-
     except:
-
         return False
-
     finally:
-
         conn.close()
 
 def login_user(username, password):
-
     conn = create_connection()
-
     cursor = conn.cursor()
-
     cursor.execute(
         """
         SELECT * FROM users
@@ -187,30 +127,20 @@ def login_user(username, password):
         """,
         (username,)
     )
-
     user = cursor.fetchone()
-
     conn.close()
-
     if user:
-
         stored_password = user[3]
-
         if bcrypt.checkpw(
             password.encode('utf-8'),
             stored_password
         ):
-
             return True
-
     return False
 
 def get_user_email(username):
-
     conn = create_connection()
-
     cursor = conn.cursor()
-
     cursor.execute(
         """
         SELECT email
@@ -219,131 +149,77 @@ def get_user_email(username):
         """,
         (username,)
     )
-
     result = cursor.fetchone()
-
     conn.close()
-
     if result:
-
         return result[0]
-
     return None
 
 # ---------------- EXPENSE FUNCTIONS ----------------
 
-def add_expense(
-    user_id,
-    category,
-    amount,
-    note
-):
-
+def add_expense(user_id, category, amount, note):
     conn = create_connection()
-
     cursor = conn.cursor()
-
     cursor.execute(
         """
-        INSERT INTO expenses(
-            user_id,
-            category,
-            amount,
-            note
-        )
-
+        INSERT INTO expenses(user_id, category, amount, note)
         VALUES (?, ?, ?, ?)
         """,
-        (
-            user_id,
-            category,
-            amount,
-            note
-        )
+        (user_id, category, amount, note)
     )
-
     conn.commit()
-
     conn.close()
 
 def load_expenses(user_id):
-
     conn = create_connection()
-
     query = f"""
-
     SELECT * FROM expenses
-
     WHERE user_id='{user_id}'
     """
-
-    df = pd.read_sql_query(
-        query,
-        conn
-    )
-
+    df = pd.read_sql_query(query, conn)
     conn.close()
-
     return df
 
 # ---------------- INCOME FUNCTIONS ----------------
 
-def add_income(
-    user_id,
-    source,
-    amount
-):
-
+def add_income(user_id, source, amount):
     conn = create_connection()
-
     cursor = conn.cursor()
-
     cursor.execute(
         """
-        INSERT INTO income(
-            user_id,
-            source,
-            amount
-        )
-
+        INSERT INTO income(user_id, source, amount)
         VALUES (?, ?, ?)
         """,
-        (
-            user_id,
-            source,
-            amount
-        )
+        (user_id, source, amount)
     )
-
     conn.commit()
-
     conn.close()
 
 def load_income(user_id):
-
     conn = create_connection()
-
     query = f"""
-
     SELECT * FROM income
-
     WHERE user_id='{user_id}'
     """
-
-    df = pd.read_sql_query(
-        query,
-        conn
-    )
-
+    df = pd.read_sql_query(query, conn)
     conn.close()
-
     return df
 
 # ---------------- SESSION ----------------
 
 if "logged_in" not in st.session_state:
-
     st.session_state.logged_in = False
+
+# ---------------- GOOGLE OAUTH SETUP ----------------
+
+authenticator = Authenticate(
+    secret_credentials_path=None,
+    cookie_name='finguide_cookie',
+    cookie_key='finguide_secret_key_abc123',
+    redirect_uri=st.secrets["google_oauth"]["redirect_uri"],
+    client_id=st.secrets["google_oauth"]["client_id"],
+    client_secret=st.secrets["google_oauth"]["client_secret"],
+)
 
 # ---------------- AUTH SCREEN ----------------
 
@@ -353,66 +229,82 @@ if not st.session_state.logged_in:
 
     auth_mode = st.sidebar.selectbox(
         "Authentication",
-        ["Login", "Register"]
+        ["Login", "Register", "Login with Google"]
     )
 
-    username = st.text_input("Username")
+    # ---------------- GOOGLE LOGIN ----------------
 
-    email = st.text_input("Email")
+    if auth_mode == "Login with Google":
 
-    password = st.text_input(
-        "Password",
-        type="password"
-    )
+        authenticator.check_authentification()
 
-    # REGISTER
+        if st.session_state.get("connected"):
 
-    if auth_mode == "Register":
+            google_email = st.session_state["user_info"].get("email")
+            google_name = st.session_state["user_info"].get("name", google_email)
+
+            conn = create_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT * FROM users WHERE email=?",
+                (google_email,)
+            )
+            existing = cursor.fetchone()
+
+            if not existing:
+                cursor.execute(
+                    "INSERT INTO users(username, email, password) VALUES (?, ?, ?)",
+                    (google_name, google_email, b"GOOGLE_OAUTH")
+                )
+                conn.commit()
+
+            conn.close()
+
+            st.session_state.logged_in = True
+            st.session_state.username = google_name
+            st.rerun()
+
+        else:
+
+            st.markdown("#### Sign in with Google")
+            authenticator.login()
+            st.stop()
+
+    # ---------------- MANUAL REGISTER ----------------
+
+    elif auth_mode == "Register":
+
+        username = st.text_input("Username")
+        email = st.text_input("Email")
+        password = st.text_input("Password", type="password")
 
         if st.button("Register"):
 
-            success = register_user(
-                username,
-                email,
-                password
-            )
+            success = register_user(username, email, password)
 
             if success:
-
-                st.success(
-                    "Registration Successful ✅"
-                )
-
+                st.success("Registration Successful ✅")
             else:
+                st.error("Username already exists")
 
-                st.error(
-                    "Username already exists"
-                )
-
-    # LOGIN
+    # ---------------- MANUAL LOGIN ----------------
 
     else:
 
+        username = st.text_input("Username")
+        email = st.text_input("Email")
+        password = st.text_input("Password", type="password")
+
         if st.button("Login"):
 
-            success = login_user(
-                username,
-                password
-            )
+            success = login_user(username, password)
 
             if success:
-
                 st.session_state.logged_in = True
-
                 st.session_state.username = username
-
                 st.rerun()
-
             else:
-
-                st.error(
-                    "Invalid Credentials"
-                )
+                st.error("Invalid Credentials")
 
 # ---------------- MAIN APP ----------------
 
@@ -434,9 +326,7 @@ else:
     )
 
     if st.sidebar.button("Logout"):
-
         st.session_state.logged_in = False
-
         st.rerun()
 
     # ---------------- CURRENT USER ----------------
@@ -445,13 +335,8 @@ else:
 
     # ---------------- LOAD DATA ----------------
 
-    expense_df = load_expenses(
-        current_user
-    )
-
-    income_df = load_income(
-        current_user
-    )
+    expense_df = load_expenses(current_user)
+    income_df = load_income(current_user)
 
     total_income = (
         income_df['amount'].sum()
@@ -473,54 +358,27 @@ else:
 
         col1, col2, col3 = st.columns(3)
 
-        col1.metric(
-            "Total Income",
-            f"₹{total_income}"
-        )
-
-        col2.metric(
-            "Total Expenses",
-            f"₹{total_expense}"
-        )
-
-        col3.metric(
-            "Savings",
-            f"₹{savings}"
-        )
+        col1.metric("Total Income", f"₹{total_income}")
+        col2.metric("Total Expenses", f"₹{total_expense}")
+        col3.metric("Savings", f"₹{savings}")
 
         st.markdown("---")
 
         # Financial Health
 
         if total_income > 0:
-
-            ratio = (
-                savings / total_income
-            ) * 100
-
+            ratio = (savings / total_income) * 100
         else:
-
             ratio = 0
 
         st.subheader("Financial Health")
 
         if ratio >= 40:
-
-            st.success(
-                "Excellent 🟢"
-            )
-
+            st.success("Excellent 🟢")
         elif ratio >= 20:
-
-            st.warning(
-                "Good 🟡"
-            )
-
+            st.warning("Good 🟡")
         else:
-
-            st.error(
-                "Poor 🔴"
-            )
+            st.error("Poor 🔴")
 
         # Charts
 
@@ -537,10 +395,7 @@ else:
                 hole=0.4
             )
 
-            st.plotly_chart(
-                fig,
-                use_container_width=True
-            )
+            st.plotly_chart(fig, use_container_width=True)
 
     # ---------------- INCOME MANAGER ----------------
 
@@ -559,25 +414,13 @@ else:
             ]
         )
 
-        amount = st.number_input(
-            "Income Amount",
-            min_value=0.0
-        )
+        amount = st.number_input("Income Amount", min_value=0.0)
 
         if st.button("Add Income"):
-
-            add_income(
-                current_user,
-                source,
-                amount
-            )
-
-            st.success(
-                "Income Added Successfully ✅"
-            )
+            add_income(current_user, source, amount)
+            st.success("Income Added Successfully ✅")
 
         st.subheader("Income History")
-
         st.dataframe(income_df)
 
     # ---------------- EXPENSE ENTRY ----------------
@@ -599,25 +442,12 @@ else:
             ]
         )
 
-        amount = st.number_input(
-            "Expense Amount",
-            min_value=0.0
-        )
-
+        amount = st.number_input("Expense Amount", min_value=0.0)
         note = st.text_input("Note")
 
         if st.button("Save Expense"):
-
-            add_expense(
-                current_user,
-                category,
-                amount,
-                note
-            )
-
-            st.success(
-                "Expense Added Successfully ✅"
-            )
+            add_expense(current_user, category, amount, note)
+            st.success("Expense Added Successfully ✅")
 
     # ---------------- ANALYTICS ----------------
 
@@ -639,20 +469,13 @@ else:
                 color='category'
             )
 
-            st.plotly_chart(
-                fig,
-                use_container_width=True
-            )
+            st.plotly_chart(fig, use_container_width=True)
 
             st.subheader("Expense History")
-
             st.dataframe(expense_df)
 
         else:
-
-            st.info(
-                "No expense data available."
-            )
+            st.info("No expense data available.")
 
     # ---------------- BUDGET PLANNER ----------------
 
@@ -660,37 +483,18 @@ else:
 
         st.title("💵 Budget Planner")
 
-        monthly_budget = st.number_input(
-            "Monthly Budget",
-            min_value=0.0
-        )
+        monthly_budget = st.number_input("Monthly Budget", min_value=0.0)
 
-        remaining = (
-            monthly_budget - total_expense
-        )
+        remaining = monthly_budget - total_expense
 
-        st.metric(
-            "Remaining Budget",
-            f"₹{remaining}"
-        )
+        st.metric("Remaining Budget", f"₹{remaining}")
 
         if total_expense > monthly_budget:
-
-            st.error(
-                "Budget Exceeded ⚠️"
-            )
-
+            st.error("Budget Exceeded ⚠️")
         elif total_expense > monthly_budget * 0.8:
-
-            st.warning(
-                "80% Budget Used"
-            )
-
+            st.warning("80% Budget Used")
         else:
-
-            st.success(
-                "Budget Under Control ✅"
-            )
+            st.success("Budget Under Control ✅")
 
     # ---------------- PREDICTIONS ----------------
 
@@ -700,34 +504,18 @@ else:
 
         try:
 
-            model = joblib.load(
-                "expense_prediction_model.pkl"
-            )
+            model = joblib.load("expense_prediction_model.pkl")
 
-            future_days = st.slider(
-                "Future Days",
-                1,
-                30,
-                7
-            )
+            future_days = st.slider("Future Days", 1, 30, 7)
 
-            future = np.array([
-                [len(expense_df) + future_days]
-            ])
+            future = np.array([[len(expense_df) + future_days]])
 
-            prediction = model.predict(
-                future
-            )
+            prediction = model.predict(future)
 
-            st.success(
-                f"Predicted Expense: ₹{prediction[0]:.2f}"
-            )
+            st.success(f"Predicted Expense: ₹{prediction[0]:.2f}")
 
         except:
-
-            st.warning(
-                "Train ML model first."
-            )
+            st.warning("Train ML model first.")
 
     # ---------------- SETTINGS ----------------
 
@@ -735,13 +523,9 @@ else:
 
         st.title("📧 Monthly Financial Reports")
 
-        user_email = get_user_email(
-            current_user
-        )
+        user_email = get_user_email(current_user)
 
-        st.write(
-            f"Registered Email: {user_email}"
-        )
+        st.write(f"Registered Email: {user_email}")
 
         if st.button("Send Monthly Report"):
 
@@ -759,49 +543,26 @@ Total Savings: ₹{savings}
 ---------------------------------------
 """
 
-            # Financial Health
-
             if total_income > 0:
-
-                ratio = (
-                    savings / total_income
-                ) * 100
-
+                ratio = (savings / total_income) * 100
             else:
-
                 ratio = 0
 
             if ratio >= 40:
-
                 report += "\nFinancial Health: Excellent"
-
             elif ratio >= 20:
-
                 report += "\nFinancial Health: Good"
-
             else:
-
                 report += "\nFinancial Health: Poor"
-
-            # AI Recommendations
 
             report += "\n\nAI Recommendations:\n"
 
             if total_expense > total_income * 0.8:
-
-                report += (
-                    "- Reduce monthly spending.\n"
-                )
-
+                report += "- Reduce monthly spending.\n"
             else:
+                report += "- Budget is under control.\n"
 
-                report += (
-                    "- Budget is under control.\n"
-                )
-
-            report += (
-                "- Continue tracking expenses regularly.\n"
-            )
+            report += "- Continue tracking expenses regularly.\n"
 
             send_email(
                 user_email,
@@ -809,6 +570,4 @@ Total Savings: ₹{savings}
                 report
             )
 
-            st.success(
-                "Financial Report Sent Successfully ✅"
-            )
+            st.success("Financial Report Sent Successfully ✅")
