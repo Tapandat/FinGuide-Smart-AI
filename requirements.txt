@@ -1,4 +1,3 @@
-
 streamlit
 pandas
 numpy
@@ -9,3 +8,6 @@ bcrypt
 pyngrok
 matplotlib
 reportlab
+streamlit-google-auth
+authlib
+requests
