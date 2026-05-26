@@ -5,10 +5,9 @@ import bcrypt
 import plotly.express as px
 import joblib
 import numpy as np
-import os
 import json
 from email_service import send_email
-from streamlit_google_auth import Authenticate
+from streamlit_oauth import OAuth2Component
 
 # ---------------- PAGE CONFIG ----------------
 
@@ -207,32 +206,17 @@ def load_income(user_id):
     conn.close()
     return df
 
+# ---------------- GOOGLE OAUTH CONSTANTS ----------------
+
+GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/auth"
+GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo"
+GOOGLE_SCOPE = "openid email profile"
+
 # ---------------- SESSION ----------------
 
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
-
-# ---------------- GOOGLE OAUTH SETUP ----------------
-
-google_creds = {
-    "web": {
-        "client_id": st.secrets["google_oauth"]["client_id"],
-        "client_secret": st.secrets["google_oauth"]["client_secret"],
-        "redirect_uris": [st.secrets["google_oauth"]["redirect_uri"]],
-        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-        "token_uri": "https://oauth2.googleapis.com/token"
-    }
-}
-
-with open("google_credentials.json", "w") as f:
-    json.dump(google_creds, f)
-
-authenticator = Authenticate(
-    secret_credentials_path='google_credentials.json',
-    cookie_name='finguide_cookie',
-    cookie_key='finguide_secret_key_abc123',
-    redirect_uri=st.secrets["google_oauth"]["redirect_uri"],
-)
 
 # ---------------- AUTH SCREEN ----------------
 
@@ -249,12 +233,37 @@ if not st.session_state.logged_in:
 
     if auth_mode == "Login with Google":
 
-        authenticator.check_authentification()
+        st.markdown("#### Sign in with Google")
 
-        if st.session_state.get("connected"):
+        oauth2 = OAuth2Component(
+            client_id=st.secrets["google_oauth"]["client_id"],
+            client_secret=st.secrets["google_oauth"]["client_secret"],
+            authorize_endpoint=GOOGLE_AUTH_URL,
+            token_endpoint=GOOGLE_TOKEN_URL,
+        )
 
-            google_email = st.session_state["user_info"].get("email")
-            google_name = st.session_state["user_info"].get("name", google_email)
+        result = oauth2.authorize_button(
+            name="Continue with Google",
+            redirect_uri=st.secrets["google_oauth"]["redirect_uri"],
+            scope=GOOGLE_SCOPE,
+            icon="https://www.google.com/favicon.ico",
+            use_container_width=True,
+            pkce="S256",
+        )
+
+        if result and "token" in result:
+
+            import requests
+
+            token = result["token"]["access_token"]
+
+            user_info = requests.get(
+                GOOGLE_USERINFO_URL,
+                headers={"Authorization": f"Bearer {token}"}
+            ).json()
+
+            google_email = user_info.get("email")
+            google_name = user_info.get("name", google_email)
 
             conn = create_connection()
             cursor = conn.cursor()
@@ -276,11 +285,6 @@ if not st.session_state.logged_in:
             st.session_state.logged_in = True
             st.session_state.username = google_name
             st.rerun()
-
-        else:
-            st.markdown("#### Sign in with Google")
-            authenticator.login()
-            st.stop()
 
     # ---------------- MANUAL REGISTER ----------------
 
