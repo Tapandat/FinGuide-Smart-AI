@@ -5,6 +5,8 @@ import bcrypt
 import plotly.express as px
 import joblib
 import numpy as np
+import os
+import json
 from email_service import send_email
 from streamlit_google_auth import Authenticate
 
@@ -212,13 +214,24 @@ if "logged_in" not in st.session_state:
 
 # ---------------- GOOGLE OAUTH SETUP ----------------
 
+google_creds = {
+    "web": {
+        "client_id": st.secrets["google_oauth"]["client_id"],
+        "client_secret": st.secrets["google_oauth"]["client_secret"],
+        "redirect_uris": [st.secrets["google_oauth"]["redirect_uri"]],
+        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+        "token_uri": "https://oauth2.googleapis.com/token"
+    }
+}
+
+with open("google_credentials.json", "w") as f:
+    json.dump(google_creds, f)
+
 authenticator = Authenticate(
-    secret_credentials_path=None,
+    secret_credentials_path='google_credentials.json',
     cookie_name='finguide_cookie',
     cookie_key='finguide_secret_key_abc123',
     redirect_uri=st.secrets["google_oauth"]["redirect_uri"],
-    client_id=st.secrets["google_oauth"]["client_id"],
-    client_secret=st.secrets["google_oauth"]["client_secret"],
 )
 
 # ---------------- AUTH SCREEN ----------------
@@ -265,7 +278,6 @@ if not st.session_state.logged_in:
             st.rerun()
 
         else:
-
             st.markdown("#### Sign in with Google")
             authenticator.login()
             st.stop()
@@ -279,9 +291,7 @@ if not st.session_state.logged_in:
         password = st.text_input("Password", type="password")
 
         if st.button("Register"):
-
             success = register_user(username, email, password)
-
             if success:
                 st.success("Registration Successful ✅")
             else:
@@ -296,9 +306,7 @@ if not st.session_state.logged_in:
         password = st.text_input("Password", type="password")
 
         if st.button("Login"):
-
             success = login_user(username, password)
-
             if success:
                 st.session_state.logged_in = True
                 st.session_state.username = username
@@ -364,8 +372,6 @@ else:
 
         st.markdown("---")
 
-        # Financial Health
-
         if total_income > 0:
             ratio = (savings / total_income) * 100
         else:
@@ -379,8 +385,6 @@ else:
             st.warning("Good 🟡")
         else:
             st.error("Poor 🔴")
-
-        # Charts
 
         if not expense_df.empty:
 
@@ -503,17 +507,11 @@ else:
         st.title("🤖 AI Predictions")
 
         try:
-
             model = joblib.load("expense_prediction_model.pkl")
-
             future_days = st.slider("Future Days", 1, 30, 7)
-
             future = np.array([[len(expense_df) + future_days]])
-
             prediction = model.predict(future)
-
             st.success(f"Predicted Expense: ₹{prediction[0]:.2f}")
-
         except:
             st.warning("Train ML model first.")
 
