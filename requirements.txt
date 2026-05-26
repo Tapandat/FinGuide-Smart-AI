@@ -8,6 +8,5 @@ bcrypt
 pyngrok
 matplotlib
 reportlab
-streamlit-google-auth
-authlib
+streamlit-oauth
 requests
